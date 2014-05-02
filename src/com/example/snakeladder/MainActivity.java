@@ -1,27 +1,30 @@
 package com.example.snakeladder;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Random;
+
 import org.andengine.engine.camera.Camera;
 import org.andengine.engine.options.EngineOptions;
 import org.andengine.engine.options.ScreenOrientation;
 import org.andengine.engine.options.resolutionpolicy.RatioResolutionPolicy;
-import org.andengine.entity.IEntity;
-import org.andengine.entity.modifier.LoopEntityModifier;
-import org.andengine.entity.modifier.PathModifier;
-import org.andengine.entity.modifier.PathModifier.IPathModifierListener;
-import org.andengine.entity.modifier.PathModifier.Path;
 import org.andengine.entity.scene.Scene;
 import org.andengine.entity.scene.background.RepeatingSpriteBackground;
-import org.andengine.entity.sprite.AnimatedSprite;
+import org.andengine.entity.sprite.ButtonSprite;
+import org.andengine.entity.sprite.Sprite;
 import org.andengine.entity.util.FPSLogger;
-import org.andengine.opengl.texture.atlas.bitmap.BitmapTextureAtlas;
+import org.andengine.input.touch.TouchEvent;
+import org.andengine.opengl.texture.ITexture;
 import org.andengine.opengl.texture.atlas.bitmap.BitmapTextureAtlasTextureRegionFactory;
 import org.andengine.opengl.texture.atlas.bitmap.source.AssetBitmapTextureAtlasSource;
-import org.andengine.opengl.texture.region.TiledTextureRegion;
+import org.andengine.opengl.texture.bitmap.BitmapTexture;
+import org.andengine.opengl.texture.region.TextureRegion;
+import org.andengine.opengl.texture.region.TextureRegionFactory;
 import org.andengine.ui.activity.SimpleBaseGameActivity;
+import org.andengine.util.adt.io.in.IInputStreamOpener;
 import org.andengine.util.debug.Debug;
-import org.andengine.util.modifier.ease.EaseSineInOut;
 
-import android.widget.Toast;
+import com.example.snakeladder.model.Player;
 
 public class MainActivity extends SimpleBaseGameActivity {
 	// ===========================================================
@@ -29,14 +32,24 @@ public class MainActivity extends SimpleBaseGameActivity {
 	// ===========================================================
 	private static final int CAMERA_WIDTH = 720;
 	private static final int CAMERA_HEIGHT = 480;
+	private static final int ICON_SIZE = 30;
+	private static final int START_X = 10;
+	private static final int START_Y = 365;
+
+	// ===========================================================
+	// Objects
+	// ===========================================================
+	private Player p1;
+	private Player p2;
 
 	// ===========================================================
 	// Fields
 	// ===========================================================
 	private RepeatingSpriteBackground mGrassBackground;
 
-	private BitmapTextureAtlas mBitmapTextureAtlas;
-	private TiledTextureRegion mPlayerTextureRegion;
+	private TextureRegion mPlayer1TextureRegion;
+	private TextureRegion mPlayer2TextureRegion;
+	private TextureRegion diceTextureRegion;
 
 	// ===========================================================
 	// Constructors
@@ -52,8 +65,6 @@ public class MainActivity extends SimpleBaseGameActivity {
 
 	@Override
 	public EngineOptions onCreateEngineOptions() {
-		Toast.makeText(this, "You move my sprite right round, right round...", Toast.LENGTH_LONG).show();
-
 		final Camera camera = new Camera(0, 0, CAMERA_WIDTH, CAMERA_HEIGHT);
 		return new EngineOptions(true, ScreenOrientation.LANDSCAPE_FIXED, new RatioResolutionPolicy(CAMERA_WIDTH, CAMERA_HEIGHT), camera);
 	}
@@ -65,9 +76,23 @@ public class MainActivity extends SimpleBaseGameActivity {
 		this.mGrassBackground = new RepeatingSpriteBackground(CAMERA_WIDTH, CAMERA_HEIGHT, this.getTextureManager(), AssetBitmapTextureAtlasSource.create(this.getAssets(), "gfx/background.png"),
 				this.getVertexBufferObjectManager());
 
-		this.mBitmapTextureAtlas = new BitmapTextureAtlas(this.getTextureManager(), 128, 128);
-		this.mPlayerTextureRegion = BitmapTextureAtlasTextureRegionFactory.createTiledFromAsset(this.mBitmapTextureAtlas, this, "player.png", 0, 0, 3, 4);
-		this.mBitmapTextureAtlas.load();
+		ITexture p1Texture = loadTexture("gfx/p1.png");
+		ITexture p2Texture = loadTexture("gfx/p2.png");
+		ITexture diceTexture = loadTexture("gfx/dice.png");
+
+		p1Texture.load();
+		p2Texture.load();
+		diceTexture.load();
+
+		this.mPlayer1TextureRegion = TextureRegionFactory.extractFromTexture(p1Texture);
+		this.mPlayer2TextureRegion = TextureRegionFactory.extractFromTexture(p2Texture);
+		this.diceTextureRegion = TextureRegionFactory.extractFromTexture(diceTexture);
+
+		this.p1 = new Player();
+		p1.isTurn = true;
+
+		this.p2 = new Player();
+		p2.isTurn = false;
 	}
 
 	@Override
@@ -78,47 +103,62 @@ public class MainActivity extends SimpleBaseGameActivity {
 		scene.setBackground(this.mGrassBackground);
 
 		/* Create the face and add it to the scene. */
-		final AnimatedSprite player = new AnimatedSprite(10, 10, 48, 64, this.mPlayerTextureRegion, this.getVertexBufferObjectManager());
+		int posX = START_X + 17;
+		int posY = START_Y - ICON_SIZE;
+		p1.sprite = new Sprite(posX, posY, ICON_SIZE, ICON_SIZE, this.mPlayer1TextureRegion, this.getVertexBufferObjectManager());
+		p1.setXY(posX, posY);
+		scene.attachChild(p1.sprite);
 
-		final Path path = new Path(5).to(10, 10).to(10, CAMERA_HEIGHT - 74).to(CAMERA_WIDTH - 58, CAMERA_HEIGHT - 74).to(CAMERA_WIDTH - 58, 10).to(10, 10);
-		/* Add the proper animation when a waypoint of the path is passed. */
-		player.registerEntityModifier(new LoopEntityModifier(new PathModifier(30, path, null, new IPathModifierListener() {
-			@Override
-			public void onPathStarted(final PathModifier pPathModifier, final IEntity pEntity) {
-				Debug.d("onPathStarted");
-			}
+		posY = START_Y - (ICON_SIZE * 2) - 2;
+		p2.sprite = new Sprite(posX, posY, ICON_SIZE, ICON_SIZE, this.mPlayer2TextureRegion, this.getVertexBufferObjectManager());
+		p2.setXY(posX, posY);
+		scene.attachChild(p2.sprite);
 
-			@Override
-			public void onPathWaypointStarted(final PathModifier pPathModifier, final IEntity pEntity, final int pWaypointIndex) {
-				Debug.d("onPathWaypointStarted:  " + pWaypointIndex);
-				switch (pWaypointIndex) {
-				case 0:
-					player.animate(new long[] { 200, 200, 200 }, 6, 8, true);
-					break;
-				case 1:
-					player.animate(new long[] { 200, 200, 200 }, 3, 5, true);
-					break;
-				case 2:
-					player.animate(new long[] { 200, 200, 200 }, 0, 2, true);
-					break;
-				case 3:
-					player.animate(new long[] { 200, 200, 200 }, 9, 11, true);
-					break;
+		ButtonSprite diceButton = new ButtonSprite(START_X, START_Y + 20, diceTextureRegion, this.getVertexBufferObjectManager()) {
+			public boolean onAreaTouched(TouchEvent pSceneTouchEvent, float pTouchAreaLocalX, float pTouchAreaLocalY) {
+				if (pSceneTouchEvent.isActionUp() && this.isEnabled()) {
+					Debug.e("DICE!!!");
+					if (p1.isTurn) {
+						p1.Move(doDice(), this, ICON_SIZE);
+						p1.isTurn = false;
+						p2.isTurn = true;
+					} else if (p2.isTurn) {
+						p2.Move(doDice(), this, ICON_SIZE);
+						p2.isTurn = false;
+						p1.isTurn = true;
+					}
+
+					return true;
 				}
+				return false;
 			}
-
-			@Override
-			public void onPathWaypointFinished(final PathModifier pPathModifier, final IEntity pEntity, final int pWaypointIndex) {
-				Debug.d("onPathWaypointFinished: " + pWaypointIndex);
-			}
-
-			@Override
-			public void onPathFinished(final PathModifier pPathModifier, final IEntity pEntity) {
-				Debug.d("onPathFinished");
-			}
-		}, EaseSineInOut.getInstance())));
-		scene.attachChild(player);
+		};
+		scene.attachChild(diceButton);
+		scene.registerTouchArea(diceButton);
 
 		return scene;
+	}
+
+	/*
+	 * Helper
+	 */
+	private int doDice() {
+		Random r = new Random();
+		return r.nextInt(6) + 1;
+	}
+
+	private ITexture loadTexture(final String path) {
+		try {
+			ITexture texture = new BitmapTexture(getTextureManager(), new IInputStreamOpener() {
+				@Override
+				public InputStream open() throws IOException {
+					return getAssets().open(path);
+				}
+			});
+			return texture;
+		} catch (IOException e) {
+			Debug.e(e);
+		}
+		return null;
 	}
 }
